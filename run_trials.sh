@@ -7,49 +7,72 @@ TRIALS_DIR="$SCRIPT_DIR/trials"
 MAX_TURNS="${MAX_TURNS:-50}"
 MODEL="${MODEL:-sonnet}"
 
-# ── Determine which trials to run ─────────────────────────────
+# ── Determine which apps and variants to run ──────────────────
+# Usage: ./run_trials.sh [app] [variant]
+#   ./run_trials.sh                              # all apps, both variants
+#   ./run_trials.sh app1-subway-accessibility     # one app, both variants
+#   ./run_trials.sh app1-subway-accessibility autark  # one app, one variant
+FILTER_VARIANT=""
 if [ $# -gt 0 ]; then
-  TRIALS=("$@")
+  APPS=("$1")
+  [ $# -gt 1 ] && FILTER_VARIANT="$2"
 else
-  TRIALS=($(ls -d "$TRIALS_DIR"/t* | xargs -n1 basename | sort))
+  APPS=()
+  for app_dir in "$TRIALS_DIR"/app*/; do
+    APPS+=("$(basename "$app_dir")")
+  done
 fi
 
-echo "==> Trials to run: ${TRIALS[*]}"
+echo "==> Apps to run: ${APPS[*]}"
+[ -n "$FILTER_VARIANT" ] && echo "==> Variant: $FILTER_VARIANT"
 echo "==> Model: $MODEL"
 echo "==> Max turns: $MAX_TURNS"
 echo ""
 
-# ── Run each trial ────────────────────────────────────────────
-for trial in "${TRIALS[@]}"; do
-  TRIAL_DIR="$TRIALS_DIR/$trial"
-  PROMPT_FILE="$TRIAL_DIR/prompt.md"
+# ── Run each app ─────────────────────────────────────────────
+for app in "${APPS[@]}"; do
+  APP_DIR="$TRIALS_DIR/$app"
 
-  if [ ! -f "$PROMPT_FILE" ]; then
-    echo "WARNING: $PROMPT_FILE not found, skipping."
-    continue
+  # Determine next trial number (t1, t2, t3, ...)
+  LAST_TRIAL=$(ls -d "$APP_DIR"/t* 2>/dev/null | sed 's/.*\/t//' | sort -n | tail -1)
+  NEXT_NUM=$(( ${LAST_TRIAL:-0} + 1 ))
+  TRIAL_NUM="t${NEXT_NUM}"
+
+  if [ -n "$FILTER_VARIANT" ]; then
+    VARIANTS=("$FILTER_VARIANT")
+  else
+    VARIANTS=(autark general)
   fi
 
-  # Output dir inside the trial folder
-  OUTPUT_DIR="$TRIAL_DIR/output"
-  mkdir -p "$OUTPUT_DIR"
+  for variant in "${VARIANTS[@]}"; do
+    PROMPT_FILE="$APP_DIR/prompt-${variant}.md"
 
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "  Running trial: $trial"
-  echo "  Prompt: $PROMPT_FILE"
-  echo "  Output: $OUTPUT_DIR"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    if [ ! -f "$PROMPT_FILE" ]; then
+      echo "WARNING: $PROMPT_FILE not found, skipping."
+      continue
+    fi
 
-  # Run Claude Code in the output directory
-  # --output-format stream-json: detailed JSON log of every tool call and response
-  # --verbose: required for stream-json
-  # tee saves the full JSON stream; terminal shows progress
-  START_TIME=$(date +%s)
-  (cd "$OUTPUT_DIR" && claude --print --verbose \
-    --model "$MODEL" \
-    --max-turns "$MAX_TURNS" \
-    --dangerously-skip-permissions \
-    --output-format stream-json \
-    -p "$(cat "$PROMPT_FILE")
+    TRIAL_DIR="$APP_DIR/$TRIAL_NUM/$variant"
+    OUTPUT_DIR="$TRIAL_DIR/output"
+    mkdir -p "$OUTPUT_DIR"
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  Running: $app / $TRIAL_NUM / $variant"
+    echo "  Prompt: $PROMPT_FILE"
+    echo "  Output: $OUTPUT_DIR"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Run Claude Code in the output directory
+    # --output-format stream-json: detailed JSON log of every tool call and response
+    # --verbose: required for stream-json
+    # tee saves the full JSON stream; terminal shows progress
+    START_TIME=$(date +%s)
+    (cd "$OUTPUT_DIR" && claude --print --verbose \
+      --model "$MODEL" \
+      --max-turns "$MAX_TURNS" \
+      --dangerously-skip-permissions \
+      --output-format stream-json \
+      -p "$(cat "$PROMPT_FILE")
 
 ---
 
@@ -92,16 +115,17 @@ After generating the project, you MUST validate that it fully works by following
 9. Kill the dev server when done (kill any background node processes).
 10. Do NOT stop until you have a system that compiles, builds, serves, and has no obvious runtime errors. If you exhaust all reasonable fixes, document what remains broken." \
     2>&1 | tee "$TRIAL_DIR/log.jsonl")
-  END_TIME=$(date +%s)
-  ELAPSED=$((END_TIME - START_TIME))
-  MINUTES=$((ELAPSED / 60))
-  SECONDS=$((ELAPSED % 60))
+    END_TIME=$(date +%s)
+    ELAPSED=$((END_TIME - START_TIME))
+    MINUTES=$((ELAPSED / 60))
+    SECONDS=$((ELAPSED % 60))
 
-  echo "{\"trial\": \"$trial\", \"model\": \"$MODEL\", \"max_turns\": $MAX_TURNS, \"duration_seconds\": $ELAPSED, \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > "$TRIAL_DIR/meta.json"
+    echo "{\"app\": \"$app\", \"trial\": \"$TRIAL_NUM\", \"variant\": \"$variant\", \"model\": \"$MODEL\", \"max_turns\": $MAX_TURNS, \"duration_seconds\": $ELAPSED, \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > "$TRIAL_DIR/meta.json"
 
-  echo ""
-  echo "==> Trial $trial complete in ${MINUTES}m ${SECONDS}s. Output in $OUTPUT_DIR"
-  echo ""
+    echo ""
+    echo "==> $app / $TRIAL_NUM / $variant complete in ${MINUTES}m ${SECONDS}s. Output in $OUTPUT_DIR"
+    echo ""
+  done
 done
 
 echo "==> All trials finished."

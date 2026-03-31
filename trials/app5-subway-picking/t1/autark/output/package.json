@@ -1,0 +1,21 @@
+{
+  "name": "output",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "autk-compute": "^1.0.1",
+    "autk-db": "^1.0.5",
+    "autk-map": "^0.0.9",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.2"
+  }
+}

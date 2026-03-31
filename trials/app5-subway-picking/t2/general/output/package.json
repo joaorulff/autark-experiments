@@ -1,0 +1,21 @@
+{
+  "name": "manhattan-subway-3d",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3005",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 3005"
+  },
+  "dependencies": {
+    "three": "^0.162.0",
+    "papaparse": "^5.4.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/three": "^0.162.0",
+    "@types/papaparse": "^5.3.14",
+    "vite": "^5.2.0"
+  }
+}
